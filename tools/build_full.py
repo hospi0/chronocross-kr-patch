@@ -62,6 +62,14 @@ def tokens(s):
 
 
 # ── 블록 쓰기 ───────────────────────────────────────────────────────────────
+# 실행 파일(파일 0) 안의 추출 밖 고정 문자열 — 전투·파워업 이름표 코드(파일 40 0x801ebc14~)가 직접 읽음(소형 글꼴로도 찍힘)
+#   (파일 오프셋, 칸 바이트, 원문 바이트, 번역)  2026-11-17 «호서머/터서머» = 원문 旅の娘 이 우리 글꼴로 읽힘
+EXE_FIXED = [
+    (0x5B560, 12, 'f88c8ef88d', '나그네 소녀'),   # 旅の娘 — 동료 1번(키드)·이야기 값 0x186 일 때 이름 대신(0x801ebe2c)
+    (0x5B56C, 4, 'f86ef86f', '대령'),              # 大佐 — 동료 5번(자코츠) 이름 뒤에 4바이트 그대로 붙음(0x801ebd88)
+]
+
+
 def r8_rewrite(blk, tr, codec, sub, err, tag):
     """R8 레코드 블록(u16×4 표: 오프셋·w·h·px) 다시 짜기. tr = {레코드: KO}. 번역 레코드 = 새 바이트 + 원문 끝(0 이후) 꼬리 그대로"""
     T = struct.unpack_from('<H', blk, 0)[0]
@@ -262,8 +270,8 @@ def main():
             if r in byraw: names[(gi, si)] = byraw[r]; ntemp += 1
             elif any(c >= 0x76 for c in r): err.append(('exe:%d-%d' % (gi, si), '-', '이름 번역 없음(소형 글꼴에서 안 보임)', r.hex()))
     # 3) 코덱
-    texts = list(use.values()) + list(names.values()) + list(P.KO_SJIS.values()) + list(P.KO_MSG.values())
-    small = list(names.values()) + g04build.SCOPE + namebuild.SYL
+    texts = list(use.values()) + list(names.values()) + list(P.KO_SJIS.values()) + list(P.KO_MSG.values()) + [t for _, _, _, t in EXE_FIXED]
+    small = list(names.values()) + g04build.SCOPE + namebuild.SYL + [t for _, _, _, t in EXE_FIXED]
     for i, k in list(use.items()):
         if byid[i]['kind'] in ('sjis', 'prof'): texts.append(k)
     codec = krenc.Codec(texts + g04build.SCOPE + namebuild.SYL, small=small)
@@ -340,6 +348,13 @@ def main():
     exe = kromhook.patch(exe)
     import kofixes
     exe = kofixes.patch(exe, get_exact('ko' + disc, 0))
+    exe = bytearray(exe); exe_orig = get_exact(disc, 0)
+    for off, n, jp_hex, t in EXE_FIXED:
+        assert exe_orig[off:off + len(bytes.fromhex(jp_hex))] == bytes.fromhex(jp_hex), ('실행 파일 고정 문자열 원문 불일치', hex(off))
+        nb = codec.encode(t)
+        if len(nb) > n: err.append(('exe@%x' % off, '-', '고정 문자열 %d B > %d B' % (len(nb), n), t)); continue
+        exe[off:off + n] = nb + bytes(n - len(nb))
+    exe = bytes(exe)
     repl[0] = exe
     repl.update(P.sjis_files(codec))                                 # 38/40/226 칸→SJIS 변환표 (+PoC 메모리 카드 문구)
     open(os.path.join(ROOT, 'work', 'build', '_conv40.bin'), 'wb').write(repl[40][0x21046 - 0xAA:0x21046 + 0x1000])   # screen_audit 용 변환표
