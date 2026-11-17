@@ -1,0 +1,11 @@
+# 크로노 크로스 도구
+- ccfs.py / ccget.py — 숨은 파일 표(LBA 24~35) · 번호로 꺼내기
+- cc_filediff.py · secdiff.py — 원본 ↔ 기존 패치(오라클) 비교
+- sszl.py — sszl 압축 코덱(해제·압축, 실행 파일 0x800335F0)
+- ccfont.py · glyphsheet.py · zoom.py — 대사 글꼴(0x8005670C, 22B/칸) 읽기·시트
+- cctable.py — 칸→글자 표(가나 손 확정 + work/glyphs/kanji.tsv)
+- kanjimatch.py · reviewsheet*.py · ocrprep.py · winocr.ps1 · ocrvote.py — 한자 칸 판독(모양 대조 + 윈도 OCR)
+- ccmsg.py · ccdecode.py — 대사 파서(제어 코드 인자 수 확정)·디코더
+- dump_fieldmsg.py · scan_sszl.py — 맵 대사 블록(구간 8) 전부 풀기
+- sjis_scan.py — SJIS 문자열 찾기(BIOS 글꼴 경로 문자열)
+- mipsdis.py · ovldis.py — 역어셈
