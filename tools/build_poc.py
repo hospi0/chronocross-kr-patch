@@ -33,6 +33,8 @@ def sjis_encode(codec, s, cells=12):
     for ch in s:
         if ch == ' ': out += bytes([0x81, 0x40])
         elif ch in codec.slot: out += kromhook.kr_code(codec.slot[ch])
+        elif ord(ch) < 0x80 and not ch.isdigit() and ch in codec.rev: out += kromhook.kr_code(codec.rev[ch])   # 메뉴는 반각 부호를 건너뜀
+        elif ord(ch) < 0x80 and not ch.isdigit(): out += chr(ord(ch) + 0xFEE0).encode('cp932')
         else: out += ch.encode('cp932')
     assert len(out) <= cells * 2, s
     while len(out) < cells * 2: out += bytes([0x81, 0x40])
@@ -45,6 +47,15 @@ def sjis_files(codec):
         t0 = CONV[fi]
         for ch, idx in codec.slot.items():
             b[t0 + (idx - 0x55) * 2: t0 + (idx - 0x55) * 2 + 2] = kromhook.kr_code(idx)
+        # 칸 0(반각 공백 0x20) → 원본 «20 20» 은 메뉴에서 공백 두 칸(전각 칸 둘)으로 찍힘 → 전각 공백 한 칸 «81 40»
+        #   (2026-11-17 장비·아이템 이름 «은테   루페» 벌어짐. 일본어 원문은 메뉴 문자열에 반각 공백을 안 씀 — 영향은 우리 한글뿐)
+        b[t0 - 0x55 * 2: t0 - 0x55 * 2 + 2] = b'\x81\x40'
+        # 반각 부호 칸(. ( ) , + % …)의 원본 변환값은 «20 xx»(반각 공백+ASCII) — 메뉴는 ASCII 를 건너뛰어 부호가 사라지고,
+        #   장비 설명처럼 «앞 10바이트 = 5칸»으로 잘라 찍는 화면은 1바이트 글자 때문에 조각이 겹친다(2026-11-17 «첨가물» 한자 깨짐)
+        #   → 그런 칸은 전부 대사 글꼴 칸(한국식 부호 그림) 훅 코드 2바이트로
+        for idx in range(1, 0x55):
+            o = t0 + (idx - 0x55) * 2
+            if b[o] < 0x80: b[o:o + 2] = kromhook.kr_code(idx)
         for (f, off), txt in KO_SJIS.items():
             if f == fi:
                 enc = sjis_encode(codec, txt); b[off:off + 28] = enc + bytes(28 - len(enc))

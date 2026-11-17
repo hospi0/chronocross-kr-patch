@@ -8,7 +8,7 @@ import os, sys
 HERE = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, HERE)
 import cctable, krenc
 
-GALMURI = '.!?()～：“”・'          # 갈무리11 화소 그대로
+GALMURI = '.!?()～：“”・□○△×'      # 갈무리11 화소 그대로(□○△× = 버튼 기호, «ㅁ» 과 구별 — 2026-11-17)
 
 
 def dots(cols, row=10):

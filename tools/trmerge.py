@@ -162,6 +162,13 @@ def main():
         k = re.sub(r'(\{12:(?:0C|0D|0E|0F|10|15)\})으로(?![가-힣])', r'\1로', k)
         k = re.sub(r'\{12:14\},', '{12:14}', k)                                            # 혀차기 값이 «!» 로 끝남
         if k != o: log.append((i, '말투조사', o, k)); new[i] = k
+    # ⑥-3 이어지는 줄 들여쓰기 빠짐 보충(원문 그 쪽의 이어지는 줄이 모두 «　» 로 시작할 때만, 2026-11-17 실기 «마지막 줄 왜이래»)
+    import indentcheck
+    for i, k in list(new.items()):
+        r = R[i]
+        if r['kind'] not in ('talk', 'btl') or k == r['jp']: continue
+        k2 = indentcheck.fix_indent(r['jp'], k)
+        if k2 != k: log.append((i, '들여쓰기', k, k2)); new[i] = k2
     # ⑦ 손 수정
     ov = {}
     p = os.path.join(OUT, 'override.tsv')
@@ -172,6 +179,17 @@ def main():
     for i, k in ov.items():
         if i not in R: raise SystemExit('⛔ override 에 없는 id ' + i)
         log.append((i, '손', new.get(i, R[i]['ko']), k)); new[i] = k
+    for i in ov:                                           # 손 수정 줄도 들여쓰기 보충
+        r = R[i]
+        if r['kind'] in ('talk', 'btl') and new[i] != r['jp']:
+            k2 = indentcheck.fix_indent(r['jp'], new[i])
+            if k2 != new[i]: log.append((i, '들여쓰기', new[i], k2)); new[i] = k2
+    # ⑧ 괄호 조사 없애기(2026-11-17 하스피 «조사 뺐다며») — 손 수정 뒤 마지막
+    import parenjosa
+    for i, k in list(new.items()):
+        if R[i]['kind'] in ('slot',) or k == R[i]['jp']: continue
+        k2 = parenjosa.fix(k, names)
+        if k2 != k: log.append((i, '괄호조사', k, k2)); new[i] = k2
     os.makedirs(OUT, exist_ok=True)
     with open(os.path.join(OUT, '_바뀜.tsv'), 'w', encoding='utf-8-sig') as f:
         f.write('id\t종류\t전\t후\n')

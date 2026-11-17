@@ -171,12 +171,20 @@ def u16tab_rewrite(b, tr, codec):
 
 
 def sjis_enc(codec, s):
-    out = bytearray()
-    for ch in s:
+    # ★메뉴 SJIS 글자 찍기(파일 40·226 …)는 ASCII 중 공백·숫자 말고는 «건너뛴다»(찍지 않음) → 반각 부호·영문이 사라짐
+    #   (2026-11-17 대장간 «자, 하나 완성!» → «자하나 완성»). 반각 부호·영문은 대사 글꼴 칸(한국식 부호 그림)으로 훅 코드,
+    #   글꼴에 없으면 전각 SJIS. printf 형식(%s·%d)만 ASCII 그대로.
+    out = bytearray(); k = 0
+    while k < len(s):
+        ch = s[k]
+        if ch == '%' and s[k + 1:k + 2] in ('s', 'd'): out += s[k:k + 2].encode(); k += 2; continue
         if ch == '⏎': out += b'\r\n'
-        elif ch == ' ': out += b' '
+        elif ch == ' ' or ch.isdigit() and ord(ch) < 0x80: out += ch.encode()
         elif ch in codec.slot: out += kromhook.kr_code(codec.slot[ch])
+        elif ord(ch) < 0x80 and ch in codec.rev: out += kromhook.kr_code(codec.rev[ch])
+        elif ord(ch) < 0x80: out += chr(ord(ch) + 0xFEE0).encode('cp932')
         else: out += ch.encode('cp932')
+        k += 1
     return bytes(out)
 
 
@@ -209,6 +217,20 @@ def main():
         if a in use and b in use:
             ka = krenc.normalize(use[a]); kb = krenc.normalize(use[b])
             if len(ka) != k and kb.strip('　 '): err.append((a, byid[a]['locs'][0], 'SJIS 이어지는 칸: 첫 칸 %d칸이어야 함(지금 %d칸) — 둘째 칸이 이어 붙음' % (k, len(ka)), ka))
+    # 버튼 이름 {1B:XX} = «○버튼»·«L1버튼» 등(받침 ㄴ) — 뒤 조사는 받침형, 앞뒤 «버튼» 중복 금지(2026-11-17 실기 «□버튼 로»)
+    for i, k in use.items():
+        for m in re.finditer(r'\{1B:..\}(\s*)(를|로|가|는|와|버튼)(?![가-힣])', k):
+            err.append((i, byid[i]['locs'][0], '버튼 이름 뒤 «%s%s» — 받침 있는 조사(을·으로·이·은·과)·«버튼» 중복 금지' % m.groups(), k[:30]))
+    # 주인공 이름 {08:00}/{08:8X}(바꿀 수 있음)·호칭 칸 {12:15}(31명 = 이름 그대로) 뒤 받침 타는 조사 금지(2026-11-17 하스피 — 문장으로 피함:
+    #   «{08:00},» «{08:00} 본인이라고» «이름이 {08:00}인» «{08:00}하고» «{08:00}의» 등)
+    for i, k in use.items():
+        for m in re.finditer(r'\{(?:08:(?:00|8[0-9A-F])|12:15)\}(은|는|이|가|을|를|과|와|으로|로|라는|라고|이라|라|란|여|냐|다|나|야|로서)(?![가-힣])', k):
+            err.append((i, byid[i]['locs'][0], '주인공 이름·호칭 뒤 받침 타는 조사 «%s»(이름에 따라 틀림)' % m.group(1), k[:30]))
+    # 장비 설명(파일 48): SJIS 로 바꿔 찍음 — 반각 공백은 «20 20» 두 칸으로 벌어짐 → 전각 공백만, 한 줄 10칸(원문 최대)
+    for i, k in use.items():
+        if byid[i]['locs'][0].startswith('item:48-'):
+            kk = krenc.normalize(k)
+            if ' ' in kk or len(kk) > 10: err.append((i, byid[i]['locs'][0], '장비 설명: 반각 공백 금지·10칸 이하(지금 %d칸)' % len(kk), kk))
     # 기술·엘리먼트 설명(실행 파일 묶음 26): 설명 창 한 줄 = 원문 최대 120px(10칸), 공백도 12px 로 찍힘(2026-11-17 실기)
     for i, k in use.items():
         if byid[i]['locs'][0].startswith('exe:26-'):
@@ -245,12 +267,20 @@ def main():
     for i, k in list(use.items()):
         if byid[i]['kind'] in ('sjis', 'prof'): texts.append(k)
     codec = krenc.Codec(texts + g04build.SCOPE + namebuild.SYL, small=small)
+    json.dump(codec.slot, open(os.path.join(ROOT, 'work', 'build', '_codec_slot.json'), 'w', encoding='utf8'), ensure_ascii=False)  # 화면 판독용
     one = sum(1 for v in codec.slot.values() if v < 0xA6)
     print('번역 항목 %d · 이름 %d(임시 %d) · 음절 %d(1바이트 %d) · 소형 %d' % (len(use), len(names), ntemp, len(codec.slot), one, len(codec.small)))
     for i, k in list(use.items()):
         try: codec.encode(k) if byid[i]['kind'] not in ('sjis', 'prof') else sjis_enc(codec, krenc.normalize(k))
         except (KeyError, UnicodeEncodeError, ValueError) as e:
             err.append((i, byid[i]['locs'][0], '인코딩 불가 %s' % e, k[:30])); del use[i]
+    # 화면 경로 검사기(tools/screen_audit.py)용: 실제로 쓰일 바이트
+    enc_dump = {}
+    for i, k in use.items():
+        kd = byid[i]['kind']
+        enc_dump[i] = dict(kind=kd, loc=byid[i]['locs'][0], ko=k,
+                           b=(sjis_enc(codec, krenc.normalize(k)) if kd in ('sjis', 'prof') else codec.encode(k)).hex())
+    json.dump(enc_dump, open(os.path.join(ROOT, 'work', 'build', '_enc_dump.json'), 'w', encoding='utf8'), ensure_ascii=False)
     # 치환 폭: {08:XX} = 이름, {12:XX} = 동료 전원 중 최대, {18:XX}/{15:XX} = 동료 이름 최대
     nm = {si: v for (gi, si), v in names.items() if gi == 1}
     sub = {'{08:%02X}' % si: P.name_px(codec, v) for si, v in nm.items()}
@@ -312,6 +342,7 @@ def main():
     exe = kofixes.patch(exe, get_exact('ko' + disc, 0))
     repl[0] = exe
     repl.update(P.sjis_files(codec))                                 # 38/40/226 칸→SJIS 변환표 (+PoC 메모리 카드 문구)
+    open(os.path.join(ROOT, 'work', 'build', '_conv40.bin'), 'wb').write(repl[40][0x21046 - 0xAA:0x21046 + 0x1000])   # screen_audit 용 변환표
     sj_written = []
     for f, o, n, t, tag in sj + [(f, o, n, t, tag) for f, o, n, t, tag in sjtemp]:
         b = bytearray(repl.get(f) or get_exact(disc, f))
