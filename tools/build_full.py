@@ -240,10 +240,11 @@ def main():
             kk = krenc.normalize(k)
             if ' ' in kk or len(kk) > 10: err.append((i, byid[i]['locs'][0], '장비 설명: 반각 공백 금지·10칸 이하(지금 %d칸)' % len(kk), kk))
     # 기술·엘리먼트 설명(실행 파일 묶음 26): 설명 창 한 줄 = 원문 최대 120px(10칸), 공백도 12px 로 찍힘(2026-11-17 실기)
+    #   전투 설명 창은 반각(영문·숫자·괄호)도 12px 한 칸 → 모든 글자 12px(2026-11-18, «(소비) HP회복 소» 11칸이 8px 계산으로 통과했던 것)
     for i, k in use.items():
         if byid[i]['locs'][0].startswith('exe:26-'):
             for ln in re.sub(r'\{[^}]*\}', '', krenc.normalize(k)).split('⏎'):
-                px = sum(12 if (c == ' ' or not (c.isascii() and c.isprintable())) else 8 for c in ln)
+                px = 12 * len(ln)
                 if px > 120: err.append((i, byid[i]['locs'][0], '기술 설명 줄 %dpx > 120px(10칸)' % px, ln))
     # 2) 이름·라벨: TSV 우선, 없으면 임시
     tnames, labels = load_temp_names()

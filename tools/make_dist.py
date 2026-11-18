@@ -11,7 +11,7 @@ HERE = os.path.dirname(os.path.abspath(__file__)); ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 from ccget import P
 
-VER = 'v0.9'
+VER = 'v0.91'   # 2026-11-18 하스피 지정(직접 부른 버전은 그대로)
 PKG = 'ChronoCross_KR_' + VER
 DIST = os.path.join(ROOT, 'dist', PKG)
 XDELTA = r'C:\claude\utils\xdelta.exe'
